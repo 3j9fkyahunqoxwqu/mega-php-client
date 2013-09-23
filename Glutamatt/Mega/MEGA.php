@@ -875,6 +875,7 @@ class MEGAException extends \Exception {
   const EBLOCKED = -16;
   const EOVERQUOTA = -17;
   const ETEMPUNAVAIL = -18;
+  const EHTTPSCONNECT = -19;
 
   public function __construct($code) {
     $message = NULL;
@@ -933,6 +934,9 @@ class MEGAException extends \Exception {
       case self::ETEMPUNAVAIL:
         $message = 'Resource temporarily not available, please try again later';
         break;
+      case self::EHTTPSCONNECT:
+      	$message = 'Unable to connect https';
+      	break;
     }
     parent::__construct($message, $code);
   }
