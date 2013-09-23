@@ -12,6 +12,13 @@ Requirements
 * PHP Mcrypt extension
 * PHP OpenSSL extension
 * PHP cURL extension
+* PHP pcntl extension
+
+Installation with composer
+-------------------
+
+
+
 
 Creating the client
 -------------------
