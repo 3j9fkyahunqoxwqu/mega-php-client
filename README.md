@@ -3,6 +3,22 @@ MEGA PHP Client Library
 
 PHP client library for the [MEGA API](https://mega.co.nz/#developers).
 
+This version come from https://github.com/smartinm/mega-php-client. Thanks to contributors !
+
+I've added some features to use the max bandwidth thanks to forks
+
+```php
+require_once 'vendor/autoload.php';
+
+use Glutamatt\Mega\MEGA;
+
+$mega = new MEGA() ;
+$link = 'https://mega.co.nz/#!IdOfThEFilE!ThELonG_KeyOfDaFiLE' ;
+$mega->public_file_save_from_link($link, 'where_file_will_be_saved/' );
+```
+
+
+
 *Note: This library is still under development and incomplete, so the API is subject to change.*
 
 Requirements
