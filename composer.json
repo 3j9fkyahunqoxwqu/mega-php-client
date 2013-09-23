@@ -1,0 +1,16 @@
+{
+    "name": "Glutamatt/Mega",
+    "description": "Mega.co.nz library",
+    "keywords": ["mega", "download"],
+    "homepage": "https://github.com/glutamatt/mega-php-client",
+    "type": "library",
+    "license": "MIT",
+    "authors": [{"name": "Mathieu Morlon"}],
+    "require": {
+        "php": ">=5.4",
+        "kriswallsmith/spork": "dev-master"
+    },
+    "autoload": {
+        "psr-0": { "Glutamatt\\Mega": "./" }
+    }
+}

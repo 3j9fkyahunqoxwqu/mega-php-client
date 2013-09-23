@@ -1,4 +1,11 @@
 <?php
+
+namespace Glutamatt\Mega ;
+
+use Glutamatt\Mega\Chunks\ChunkToDownloadIterator;
+use Spork\ProcessManager;
+use Spork\Batch\Strategy\CallbackStrategy;
+
 /*
  * MEGA PHP Client Library.
  */
@@ -38,6 +45,7 @@ class MEGA {
   /* User RSA private key */
   private $u_privk = NULL;
 
+  public static $debug_mode = false ;
   /**
    * Configure the default MEGA API server endpoint.
    *
@@ -45,6 +53,12 @@ class MEGA {
    */
   public static function set_default_server($server) {
     self::$server = $server;
+  }
+  
+  public static function human_filesize($bytes, $decimals = 1) {
+  	$sz = 'BKMGTP';
+  	$factor = floor((strlen($bytes) - 1) / 3);
+  	return sprintf("%.{$decimals}f", $bytes / pow(1024, $factor)) . @$sz[$factor];
   }
 
   /**
@@ -179,7 +193,7 @@ class MEGA {
    */
   public function node_file_info($node, $dl_url = FALSE, $args = array()) {
     if (empty($node['h']) || empty($node['k'])) {
-      throw new InvalidArgumentException('Invalid file node handle');
+      throw new \InvalidArgumentException('Invalid file node handle');
     }
 
     $req = array('a' => 'g') + $args;
@@ -329,10 +343,10 @@ class MEGA {
   public function public_file_info_from_link($link, $dl_url = FALSE) {
     $file = self::parse_link($link);
     if (empty($file['ph'])) {
-      throw new InvalidArgumentException('Public handle not found');
+      throw new \InvalidArgumentException('Public handle not found');
     }
     if (empty($file['key'])) {
-      throw new InvalidArgumentException('Private key not found');
+      throw new \InvalidArgumentException('Private key not found');
     }
     return $this->public_file_info($file['ph'], $file['key'], $dl_url);
   }
@@ -395,7 +409,7 @@ class MEGA {
   public function public_file_save_from_link($link, $dir_path = NULL, $filename = NULL) {
     $file = self::parse_link($link);
     if (!isset($file['ph']) || !isset($file['key'])) {
-      throw new Exception('Invalid link');
+      throw new \Exception('Invalid link');
     }
     return $this->public_file_save($file['ph'], $file['key'], $dir_path, $filename);
   }
@@ -407,7 +421,7 @@ class MEGA {
    * user's filesystem.
    */
   public function node_add() {
-    throw Exception('Not implemented');
+    throw \Exception('Not implemented');
   }
 
   /**
@@ -416,7 +430,7 @@ class MEGA {
    * Deletes a node, including all of its subnodes.
    */
   public function node_delete() {
-    throw Exception('Not implemented');
+    throw \Exception('Not implemented');
   }
 
   /**
@@ -425,7 +439,7 @@ class MEGA {
    * Moves a node to a new parent node.
    */
   public function node_move() {
-    throw Exception('Not implemented');
+    throw \Exception('Not implemented');
   }
 
   /**
@@ -434,7 +448,7 @@ class MEGA {
    * Updates the encrypted node attributes object.
    */
   public function node_update() {
-    throw Exception('Not implemented');
+    throw \Exception('Not implemented');
   }
 
   /**
@@ -443,11 +457,11 @@ class MEGA {
    * Enables or disables the public handle for a node.
    */
   public function node_publish($op) {
-    throw Exception('Not implemented');
+    throw \Exception('Not implemented');
   }
 
   public function node_unpublish($op) {
-    throw Exception('Not implemented');
+    throw \Exception('Not implemented');
   }
 
   /**
@@ -456,7 +470,7 @@ class MEGA {
    * Controls the sharing status of a node.
    */
   public function node_share($op) {
-    throw Exception('Not implemented');
+    throw \Exception('Not implemented');
   }
 
   /**
@@ -585,7 +599,7 @@ class MEGA {
    * @todo Add range support
    * @todo Add integrity check
    */
-  protected function file_download_url($url, $size, $key, $dest) {
+	protected function file_download_url($url, $size, $key, $dest) {
     // Open the cipher
     $td = mcrypt_module_open(MCRYPT_RIJNDAEL_128, '', 'ctr', '');
 
@@ -601,72 +615,116 @@ class MEGA {
     // Initialize encryption module for decryption
     mcrypt_generic_init($td, $aeskey, $iv);
 
-    $chunks = $this->get_chunks($size);
-    $stream = $this->http_open_stream($url);
-
-    // Fetch response. Due to PHP bugs like http://bugs.php.net/bug.php?id=43782
-    // and http://bugs.php.net/bug.php?id=46049 we can't rely on feof(), but
-    // instead must invoke stream_get_meta_data() each iteration.
-    $info = stream_get_meta_data($stream);
-    $alive = !$info['eof'];
-
+    $tmp_path = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'megagluta' . DIRECTORY_SEPARATOR . uniqid() . DIRECTORY_SEPARATOR ;
+    @mkdir($tmp_path, 0777, true) ;
+    $chunks = $this->get_chunks_list($size);
     $ret = 0;
-    $buffer = '';
-    foreach ($chunks as $chunk_start => $chunk_size) {
-      // Read chunk from network
-      $bytes = strlen($buffer);
-      while ($bytes < $chunk_size && $alive) {
-        $data = fread($stream, min(1024, $chunk_size - $bytes));
-        $buffer .= $data;
-
-        $bytes = strlen($buffer);
-        $info = stream_get_meta_data($stream);
-        $alive = !$info['eof'] && $data;
-      }
-
-      $chunk = substr($buffer, 0, $chunk_size);
-      $buffer = $bytes > $chunk_size ? substr($buffer, $chunk_size) : '';
-
-      // Decrypt encrypted chunk
-      $chunk = mdecrypt_generic($td, $chunk);
-      if ($bytes = fwrite($dest, $chunk)) {
-        $ret += $bytes;
-      }
+    
+    $id_chunks = 0 ;
+    foreach ($chunks as $chunk_start => $chunk_size)
+    	$process_chunks[] = ['start' => $chunk_start, 'size' => $chunk_size, 'id' => $id_chunks++] ;
+    
+    ChunkToDownloadIterator::prepare($process_chunks, $tmp_path . 'to_dl' . DIRECTORY_SEPARATOR) ;
+    
+    $manager = new ProcessManager() ;
+    $manager->process(null, function($chunk_info) use ($tmp_path, $url) {
+    	$this->chunk_download($url, $tmp_path, $chunk_info['id'], $chunk_info['start'], $chunk_info['size']) ;
+    }, new CallbackStrategy(function() {
+		$batches = [] ;
+		for ($i = 0 ; $i < 8 ; $i++) $batches[] = new ChunkToDownloadIterator($i) ;
+		return $batches ;
+	})) ;
+    
+    $next_chunk_id = 0 ;
+    $pending_time = 0 ;
+    $wait_delay = 1000 * 200 ;
+    $time_out = 1000 * 5000 ;
+    while ( $next_chunk_id < count($chunks) && ($next_file = $tmp_path . $next_chunk_id . '.chunk') )
+    {
+    	usleep($wait_delay);
+    	$pending_time += $wait_delay ;
+    	if($pending_time > $time_out) {
+    		if(!ChunkToDownloadIterator::add_value_file($next_chunk_id, $process_chunks[$next_chunk_id]))
+    			$this->chunk_download($url, $tmp_path, $next_chunk_id, $process_chunks[$next_chunk_id]['start'], $process_chunks[$next_chunk_id]['size']) ;
+    	}
+	    if(!is_readable($next_file) || !rename($next_file , ( $next_file = $next_file . '.reading')) )
+	    	continue ;
+	    $ret += fwrite($dest, mdecrypt_generic($td, file_get_contents($next_file))) ;
+	    unlink($next_file) ;
+	    $next_chunk_id++ ;
+    	$pending_time = 0 ;
     }
-
-    // Terminate decryption handle and close module
+    
+    $manager->killAll() ;
     mcrypt_generic_deinit($td);
     mcrypt_module_close($td);
-    fclose($stream);
-
-    // Returns the number of bytes written
+    
     return $ret;
   }
-
-  protected function get_chunks($size) {
-    $chunks = array();
-    $p = $pp = 0;
-    $i = 1;
-
-    while ($i <= 8 && $p < ($size - $i * 0x20000)) {
-      $chunks[$p] = $i * 0x20000;
-      $pp = $p;
-      $p += $chunks[$p];
-      $i += 1;
-    }
-
-    while ($p < $size) {
-      $chunks[$p] = 0x100000;
-      $pp = $p;
-      $p += $chunks[$p];
-    }
-
-    $chunks[$pp] = $size - $pp;
-    if (empty($chunks[$pp])) {
-      unset($chunks[$pp]);
-    }
-
-    return $chunks;
+  
+  protected function chunk_download($url, $tmp_path, $chunk_id, $chunk_start, $chunk_size)
+  {
+  	$chunk_tmp_file_name = $tmp_path . uniqid() ;
+  	$chunk_stream = $this->get_chunk_stream($url, $chunk_start, $chunk_size) ;
+  	if(!$chunk_stream) return ;
+  	file_put_contents($chunk_tmp_file_name, $chunk_stream ) ;
+  	rename($chunk_tmp_file_name , $tmp_path . $chunk_id . '.chunk') ;
+  }
+  
+  protected function get_chunk_stream($url, $chunk_start, $chunk_size)
+  {
+  	$url_parts = parse_url($url) ;
+  	$path = $url_parts['path'] . '/' . $chunk_start . '-' . ($chunk_start + $chunk_size - 1) ;
+  	$http = [
+  	"Accept: */*" , "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)" .
+  	"Ubuntu Chromium/28.0.1500.71 Chrome/28.0.1500.71 Safari/537.36" , "MEGA-Chrome-Antileak: $path" , "Origin: https://mega.co.nz" ,
+  	"Referer: https://mega.co.nz/" , "Content-Length: 0" , "Accept-Encoding: gzip,deflate,sdch" , "Connection: close",
+  	"Accept-Language: fr-FR,fr;q=0.8,en-US;q=0.6,en;q=0.4" ] ;
+  	$timeout = 5 ;
+  	$context = stream_context_create(array ('http' => array (
+  			'method' => 'POST',
+  			'header'=> implode("\r\n", $http),
+  			'timeout' => $timeout ,
+  			'content' => ''))) ;
+  	$fp = fopen('https://' . $url_parts['host'] , 'rb', false, $context);
+  	if(!$fp) throw new MEGAException(MEGAException::EHTTPSCONNECT) ;
+  	$stream = '' ;
+  	stream_set_timeout($fp, $timeout);
+  	$meta = stream_get_meta_data($fp);
+  	while(($streamlen  = strlen($stream)) < $chunk_size)
+  	{
+  		if($meta['timed_out']) return ;
+  		$stream .= fread($fp, min(1024, $chunk_size - $streamlen));
+  		$meta = stream_get_meta_data($fp);
+  	}
+  	fclose($fp) ;
+  	return $stream ;
+  }
+  
+  protected function get_chunks_list($size) {
+  	$chunks = array();
+  	$p = $pp = 0;
+  	$i = 1;
+  
+  	while ($i <= 8 && $p < ($size - $i * 0x20000)) {
+  		$chunks[$p] = $i * 0x20000;
+  		$pp = $p;
+  		$p += $chunks[$p];
+  		$i += 1;
+  	}
+  
+  	while ($p < $size) {
+  		$chunks[$p] = 0x100000;
+  		$pp = $p;
+  		$p += $chunks[$p];
+  	}
+  
+  	$chunks[$pp] = $size - $pp;
+  	if (empty($chunks[$pp])) {
+  		unset($chunks[$pp]);
+  	}
+  
+  	return $chunks;
   }
 
   protected function node_decrypt_key($k) {
@@ -770,7 +828,8 @@ class MEGA {
   }
 
   protected function log($message) {
-    echo "[DEBUG] MEGA::$message\n";
+  	if(self::$debug_mode)
+    	echo "[DEBUG] MEGA::$message\n";
   }
 
   /**
@@ -795,7 +854,7 @@ class MEGA {
   }
 }
 
-class MEGAException extends Exception {
+class MEGAException extends \Exception {
 
   const EINTERNAL = -1;
   const EARGS = -2;
@@ -1014,7 +1073,7 @@ class MEGACrypto {
     // @todo protect against syntax errors
     $attr = json_decode(MEGAUtil::from8(substr($attr, 4)), TRUE);
     if (is_null($attr)) {
-      $attr = new stdClass();
+      $attr = new \stdClass();
       $attr['n'] = 'MALFORMED_ATTRIBUTES';
     }
     return $attr;
