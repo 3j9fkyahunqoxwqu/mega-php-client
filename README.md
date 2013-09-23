@@ -16,8 +16,14 @@ Requirements
 
 Installation with composer
 -------------------
-
-
+```composer.json
+{
+    "require": {
+        "glutamatt/mega": "dev-master"
+    },
+    "minimum-stability": "dev"
+}
+```
 
 
 Creating the client
