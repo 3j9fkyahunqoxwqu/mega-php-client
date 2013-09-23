@@ -376,7 +376,7 @@ class MEGA {
    * @param array $args
    * @return boolean|string
    */
-  public function public_file_save($ph, $key, $dir_path = NULL, $filename = NULL) {
+  public function public_file_save($ph, $key, $dir_path = NULL, $filename = NULL , $stream_path = NULL) {
     // Requests a temporary download URL for a file node.
     $info = $this->public_file_info($ph, $key, TRUE);
     if (!$info || empty($info['g'])) {
@@ -385,7 +385,8 @@ class MEGA {
 
     $path = !empty($dir_path) ? rtrim($dir_path, '/\\') . '/' : '';
     $path .= !empty($filename) ? $filename : $info['at']['n'];
-
+    $path = $stream_path?$stream_path:$path ;
+    
     $stream = fopen($path, 'wb');
     try {
       $this->log("Downloading {$info['at']['n']} (size: {$info['s']}), url = {$info['g']}");
@@ -406,12 +407,12 @@ class MEGA {
    *
    * @see public_file_save()
    */
-  public function public_file_save_from_link($link, $dir_path = NULL, $filename = NULL) {
+  public function public_file_save_from_link($link, $dir_path = NULL, $filename = NULL , $stream_path = NULL) {
     $file = self::parse_link($link);
     if (!isset($file['ph']) || !isset($file['key'])) {
       throw new \Exception('Invalid link');
     }
-    return $this->public_file_save($file['ph'], $file['key'], $dir_path, $filename);
+    return $this->public_file_save($file['ph'], $file['key'], $dir_path, $filename , $stream_path);
   }
 
   /**
