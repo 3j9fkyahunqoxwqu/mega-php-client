@@ -632,7 +632,7 @@ class MEGA {
     	$this->chunk_download($url, $tmp_path, $chunk_info['id'], $chunk_info['start'], $chunk_info['size']) ;
     }, new CallbackStrategy(function() {
 		$batches = [] ;
-		for ($i = 0 ; $i < 8 ; $i++) $batches[] = new ChunkToDownloadIterator($i) ;
+		for ($i = 0 ; $i < 10 ; $i++) $batches[] = new ChunkToDownloadIterator($i) ;
 		return $batches ;
 	})) ;
     
