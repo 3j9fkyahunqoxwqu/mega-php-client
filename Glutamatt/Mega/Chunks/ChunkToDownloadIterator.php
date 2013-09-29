@@ -45,7 +45,7 @@ class ChunkToDownloadIterator implements \Iterator
 		$loop = 0 ;
 		while ($loop < 10)
 		{
-			usleep(rand(1, 50) * 1000 * 100 * ($loop+1)  );
+			usleep(rand(100, 200) * 1000 * ($loop+1));
 			$loop++ ;
 			$files = glob(self::$path . "*" . self::EXT) ;
 			natsort($files);
