@@ -45,13 +45,13 @@ class ChunkToDownloadIterator implements \Iterator
 		$loop = 0 ;
 		while ($loop < 10)
 		{
+			usleep(rand(1, 50) * 1000 * 100 * ($loop+1)  );
+			$loop++ ;
 			$files = glob(self::$path . "*" . self::EXT) ;
 			natsort($files);
 			$file = array_shift($files) ;
 			if($file && is_readable($file) && @rename($file, $file . self::EXT_CUR))
 				return $this->current = $file . self::EXT_CUR ;
-			usleep(rand(0, $loop+1) * 1000 * 100 );
-			$loop++ ;
 		}
 		self::$valid = false ;
 	}
