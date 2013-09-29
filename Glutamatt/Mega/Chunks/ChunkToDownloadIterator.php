@@ -42,17 +42,16 @@ class ChunkToDownloadIterator implements \Iterator
 	}
 
 	public function next () {
-		$loop = 10 ;
-		while ($loop > 1)
+		$loop = 0 ;
+		while ($loop < 10)
 		{
-			$loop-- ;
-			usleep(rand(0, 200) * 1000 );
 			$files = glob(self::$path . "*" . self::EXT) ;
 			natsort($files);
 			$file = array_shift($files) ;
 			if($file && is_readable($file) && @rename($file, $file . self::EXT_CUR))
 				return $this->current = $file . self::EXT_CUR ;
-
+			usleep(rand(0, $loop+1) * 1000 * 100 );
+			$loop++ ;
 		}
 		self::$valid = false ;
 	}

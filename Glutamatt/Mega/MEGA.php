@@ -639,7 +639,7 @@ class MEGA {
     $next_chunk_id = 0 ;
     $pending_time = 0 ;
     $wait_delay = 1000 * 200 ;
-    $time_out = 1000 * 5000 ;
+    $time_out = 1000 * 1000 * 10 ;
     while ( $next_chunk_id < count($chunks) && ($next_file = $tmp_path . $next_chunk_id . '.chunk') )
     {
     	usleep($wait_delay);
