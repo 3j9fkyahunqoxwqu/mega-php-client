@@ -16,12 +16,13 @@ class ChunkToDownloadIterator implements \Iterator
 	public static function prepare($data, $path, $resume = false )
 	{
 		self::$path = $path ;
-		if(!$resume) {
-			@mkdir(self::$path, 0777, true) ;
-			foreach ($data as $k => $v)
-				self::add_value_file($k, $v) ;
-		}
 		self::$isPrepared = true ;
+		if($resume) return ;
+		@mkdir(self::$path, 0777, true) ;
+	    foreach (glob($path. '*', GLOB_MARK) as $file)
+	        if (is_file($file)) unlink($file);
+		foreach ($data as $k => $v)
+			self::add_value_file($k, $v) ;
 	}
 
 	public static function add_value_file($key , $value )
