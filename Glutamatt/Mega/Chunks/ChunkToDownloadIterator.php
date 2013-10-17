@@ -13,12 +13,14 @@ class ChunkToDownloadIterator implements \Iterator
 	const EXT = '.todl' ;
 	const EXT_CUR = '.indl' ;
 
-	public static function prepare($data, $path)
+	public static function prepare($data, $path, $resume = false )
 	{
 		self::$path = $path ;
-		@mkdir(self::$path, 0777, true) ;
-		foreach ($data as $k => $v)
-			self::add_value_file($k, $v) ;
+		if(!$resume) {
+			@mkdir(self::$path, 0777, true) ;
+			foreach ($data as $k => $v)
+				self::add_value_file($k, $v) ;
+		}
 		self::$isPrepared = true ;
 	}
 

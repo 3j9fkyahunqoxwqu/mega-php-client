@@ -390,11 +390,12 @@ class MEGA {
     $path = !empty($dir_path) ? rtrim($dir_path, '/\\') . '/' : '';
     $path .= !empty($filename) ? $filename : $info['at']['n'];
     $path = $stream_path?$stream_path:$path ;
-    
-    $stream = fopen($path, 'wb');
+
+    $try_resume = is_file($path) ;
+    $stream = fopen($path, $try_resume?'ab':'wb');
     try {
       $this->log("Downloading {$info['at']['n']} (size: {$info['s']}), url = {$info['g']}");
-      $this->file_download_url($info['g'], $info['s'], MEGAUtil::base64_to_a32($key), $stream);
+      $this->file_download_url($info['g'], $info['s'], MEGAUtil::base64_to_a32($key), $stream, $try_resume);
     }
     catch (MEGAException $e) {
       fclose($stream);
@@ -613,7 +614,7 @@ class MEGA {
    * @todo Add range support
    * @todo Add integrity check
    */
-	protected function file_download_url($url, $size, $key, $dest) {
+	protected function file_download_url($url, $size, $key, $dest, $try_resume = false ) {
     // Open the cipher
     $td = mcrypt_module_open(MCRYPT_RIJNDAEL_128, '', 'ctr', '');
 
@@ -629,8 +630,10 @@ class MEGA {
     // Initialize encryption module for decryption
     mcrypt_generic_init($td, $aeskey, $iv);
 
-    $tmp_path = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'megagluta' . DIRECTORY_SEPARATOR . uniqid() . DIRECTORY_SEPARATOR ;
-    @mkdir($tmp_path, 0777, true) ;
+    $tmp_path = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'megagluta' . DIRECTORY_SEPARATOR . md5($aeskey) . DIRECTORY_SEPARATOR ;
+    $next_to_add_file = $tmp_path . 'next_to_add' ;
+    $resume_dl = $try_resume && is_dir($tmp_path) && is_file( $next_to_add_file );
+    if(!$resume_dl) @mkdir($tmp_path, 0777, true) ;
     $chunks = $this->get_chunks_list($size);
     $ret = 0;
     
@@ -638,7 +641,7 @@ class MEGA {
     foreach ($chunks as $chunk_start => $chunk_size)
     	$process_chunks[] = ['start' => $chunk_start, 'size' => $chunk_size, 'id' => $id_chunks++] ;
     
-    ChunkToDownloadIterator::prepare($process_chunks, $tmp_path . 'to_dl' . DIRECTORY_SEPARATOR) ;
+    ChunkToDownloadIterator::prepare($process_chunks, $tmp_path . 'to_dl' . DIRECTORY_SEPARATOR, $resume_dl) ;
     
     $manager = new ProcessManager() ;
     $manager->process(null, function($chunk_info) use ($tmp_path, $url) {
@@ -650,6 +653,7 @@ class MEGA {
 	})) ;
     
     $next_chunk_id = 0 ;
+    if( $resume_dl ) $next_chunk_id = intval( file_get_contents( $next_to_add_file ) ) ;
     $pending_time = 0 ;
     $wait_delay = 1000 * 200 ;
     $time_out = 1000 * 1000 * 10 ;
@@ -665,7 +669,7 @@ class MEGA {
 	    	continue ;
 	    $ret += fwrite($dest, mdecrypt_generic($td, file_get_contents($next_file))) ;
 	    unlink($next_file) ;
-	    $next_chunk_id++ ;
+	    file_put_contents( $next_to_add_file , ++$next_chunk_id ) ;
     	$pending_time = 0 ;
     }
     
@@ -717,10 +721,11 @@ class MEGA {
   	$path .= !empty($filename) ? $filename : $info['name'];
   	$path = $stream_path?$stream_path:$path ;
   	
-  	$stream = fopen($path, 'wb');
+  	$try_resume = is_file($path) ;
+    $stream = fopen($path, $try_resume?'ab':'wb');
   	try {
   		$this->log("Downloading {$info['name']} (size: {$info['size']}), url = {$info['storage_url']}");
-  		$this->file_download_url($info['storage_url'], $info['size'], MEGAUtil::base64_to_a32($info['key']), $stream);
+  		$this->file_download_url($info['storage_url'], $info['size'], MEGAUtil::base64_to_a32($info['key']), $stream, $try_resume);
   	}
   	catch (MEGAException $e) {
   		fclose($stream);
