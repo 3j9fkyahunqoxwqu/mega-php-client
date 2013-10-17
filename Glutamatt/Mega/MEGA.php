@@ -341,6 +341,10 @@ class MEGA {
    * @see public_file_info()
    */
   public function public_file_info_from_link($link, $dl_url = FALSE) {
+  	
+  	if($this->is_mega_crypter_link($link))
+  		return $this->megacrypter_file_info($link,1) ;
+  		
     $file = self::parse_link($link);
     if (empty($file['ph'])) {
       throw new \InvalidArgumentException('Public handle not found');
@@ -408,11 +412,20 @@ class MEGA {
    * @see public_file_save()
    */
   public function public_file_save_from_link($link, $dir_path = NULL, $filename = NULL , $stream_path = NULL) {
+  	
+  	if( $this->is_mega_crypter_link($link)) return 
+  		$this->public_file_save_from_mega_crypter_link($link, $dir_path , $filename  , $stream_path) ;
+  	
     $file = self::parse_link($link);
     if (!isset($file['ph']) || !isset($file['key'])) {
       throw new \Exception('Invalid link');
     }
     return $this->public_file_save($file['ph'], $file['key'], $dir_path, $filename , $stream_path);
+  }
+  
+  public function is_mega_crypter_link( $link )
+  {
+  	return preg_match( '#megacrypter#' , $link ) ;
   }
 
   /**
@@ -661,6 +674,61 @@ class MEGA {
     mcrypt_module_close($td);
     
     return $ret;
+  }
+  
+  protected function megacrypter_request( $method , $link )
+  {
+  	$context = stream_context_create(array ('http' => array (
+  			'method' => 'POST',
+  			'header'=> 'Content-type: application/json',
+  			'content' => json_encode(['m' => $method, 'link'  => $link])))) ;
+  	return json_decode(file_get_contents('http://megacrypter.com/api', null, $context), 1) ;
+  }
+  
+  protected function megacrypter_file_info( $link , $emule_mega = false )
+  {
+  	$info = $this->megacrypter_request('info', $link ) ;
+  	if( !$key = @$info['key'] ) {
+  		throw new \ErrorException('key not found :(');
+  		return false ;
+  	}
+  	$dl = $this->megacrypter_request('dl', $link ) ;
+  	if( !$storage_url = @$dl['url'] ) {
+  		throw new \ErrorException('url not found :(');
+  		return false ;
+  	}
+  	if( !$size = @$info['size'] ) {
+	  	stream_context_set_default(['http'=>['method'=>'HEAD']]) ;
+	  	$headers = get_headers($storage_url, 1) ;
+	  	$size = $headers['Content-Length'] ;
+  	}
+  	$return =  [ 'size' => $size , 'storage_url' => $storage_url , 'key' => $key , 'name' => $info['name'] ] ;
+  	if($emule_mega) return ['s' => $return['size'], 'at' => ['n' => $return['name']]] ;
+  	return $return ;
+  }
+  
+  public function public_file_save_from_mega_crypter_link( $link , $dir_path = NULL, $filename = NULL , $stream_path = NULL)
+  {
+  	$info = $this->megacrypter_file_info( $link ) ;
+  	
+  	if(! $info ) return false ;
+  	
+  	$path = !empty($dir_path) ? rtrim($dir_path, '/\\') . '/' : '';
+  	$path .= !empty($filename) ? $filename : $info['name'];
+  	$path = $stream_path?$stream_path:$path ;
+  	
+  	$stream = fopen($path, 'wb');
+  	try {
+  		$this->log("Downloading {$info['name']} (size: {$info['size']}), url = {$info['storage_url']}");
+  		$this->file_download_url($info['storage_url'], $info['size'], MEGAUtil::base64_to_a32($info['key']), $stream);
+  	}
+  	catch (MEGAException $e) {
+  		fclose($stream);
+  		throw $e;
+  	}
+  	fclose($stream);
+  	
+  	return $path;
   }
   
   protected function chunk_download($url, $tmp_path, $chunk_id, $chunk_start, $chunk_size)
