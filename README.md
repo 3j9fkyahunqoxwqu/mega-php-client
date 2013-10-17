@@ -17,6 +17,9 @@ $link = 'https://mega.co.nz/#!IdOfThEFilE!ThELonG_KeyOfDaFiLE' ;
 $mega->public_file_save_from_link($link, 'where_file_will_be_saved/' );
 ```
 
+Features
+------------
+2013/10/17 : Links from http://megacrypter.com/ handled 
 
 
 *Note: This library is still under development and incomplete, so the API is subject to change.*
